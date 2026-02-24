@@ -1,6 +1,6 @@
 # BOTC Script PDF Generator
 
-Basic utility that opens the new script tool in headless chromium and uses it to quickly generate multiple script PDFs.
+Basic utility that boots the new script tool in a headless browser and uses it to quickly and automatically generate multiple script PDFs.
 
 ## Prerequisites
 
@@ -28,14 +28,21 @@ To use this tool, you’ll need a directory with all your script JSONs in it –
 npm start -- --directory="path/to/scripts"
 ```
 
-For each script JSON in the directory, a new subdirectory will be created with 3 PDFs:
+For each script JSON in the directory, a new subdirectory will be created inside `path/to/scripts` with 3 PDFs:
 
 - the **player sheet** (1 page)
 - the **meta sheet** (1 page)
 - the **night sheet** (2 pages, print double-sided)
 
+If compact mode is enabled:
+
+```sh
+npm start -- --compact --directory="path/to/scripts"
+```
+
+… then each subdirectory will contain a single PDF with two pages, the first being the player sheet and the second being the meta sheet + compact night sheet.
+
 ## TODO
 
-- [ ] Add settings, especially for 2-sided PDF generation. Currently it’s not possible to get anything other than the default output.
 - [ ] CSS injection, maybe?
 
