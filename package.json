@@ -11,6 +11,9 @@
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "dependencies": {
+    "command-line-args": "^6.0.1",
+    "command-line-usage": "^7.0.3",
+    "progress": "^2.0.3",
     "puppeteer": "^24.32.0"
   }
 }

@@ -1,43 +1,125 @@
 import puppeteer from "puppeteer";
 import fs from "node:fs";
+import fsPromises from "node:fs/promises";
+import { exit } from "node:process";
 
-const arg = process.argv.slice(2)[0];
+import { scriptLink } from "./script.js";
 
-const browser = await puppeteer.launch();
-const page = await browser.newPage();
+import ProgressBar from "progress";
+import commandLineArgs from "command-line-args";
+import commandLineUsage from "command-line-usage";
 
-await page.goto(arg, {
-  waitUntil: "networkidle2",
-});
+const options = commandLineArgs([
+  { name: "directory", alias: "d", type: String },
+  { name: "help", alias: "h", type: Boolean },
+]);
 
-// Close the tour
-await page.keyboard.down("Escape");
-const scriptName = await page.evaluate(
-  (el) => el.textContent,
-  await page.$(".script-name"),
-);
+const usage = commandLineUsage([
+  {
+    header: "BOTC PDF Generator",
+    content: "Generates PDFs using the official script tool from the terminal",
+  },
+  {
+    header: "Options",
+    optionList: [
+      {
+        name: "directory",
+        alias: "d",
+        description:
+          "A directory containing script JSON files. Make sure it doesn’t contain anything else.",
+      },
+      {
+        name: "help",
+        alias: "h",
+        description: "Display this guide.",
+      },
+    ],
+  },
+]);
 
-const n = (s) => s.replace(/[^a-z0-9]/gi, "-").toLowerCase();
-
-const dir = n(scriptName);
-if (!fs.existsSync(dir)) {
-  fs.mkdirSync(dir);
+if (options.help) {
+  console.log(usage);
+  exit(0);
 }
 
-await page.pdf({
-  path: `${dir}/${n(scriptName)}-player-sheet.pdf`,
-  pageRanges: "1",
-  format: "A4",
+if (!options.directory) {
+  console.error("You need to pass a directory!");
+  console.error(usage);
+  exit(1);
+}
+
+if (!fs.existsSync(options.directory)) {
+  console.error(`${options.directory} does not exist.`);
+  exit(1);
+}
+
+const rootDir = options.directory;
+const scriptTool = new URL("https://script.bloodontheclocktower.com");
+
+console.log("Loading script tool ...");
+const browser = await puppeteer.launch();
+const page = await browser.newPage();
+await page.goto(scriptTool, { waitUntil: "networkidle2" });
+
+// Close the tour (will stay closed between reloads)
+await page.keyboard.down("Escape");
+
+const name = (json) => json.find((o) => o?.id === "_meta")?.name;
+const normalize = (s) => s.replace(/[^a-z0-9]/gi, "-").toLowerCase();
+
+console.log("Reading script directory ...");
+const nfiles = fs
+  .readdirSync(rootDir, { withFileTypes: true })
+  .filter((x) => x.name.endsWith(".json")).length;
+
+const bar = new ProgressBar(":bar :current/:total :etas (:script)", {
+  total: nfiles,
+  complete: "█",
+  incomplete: "░",
 });
-await page.pdf({
-  path: `${dir}/${n(scriptName)}-meta-sheet.pdf`,
-  pageRanges: "2",
-  format: "A4",
-});
-await page.pdf({
-  path: `${dir}/${n(scriptName)}-night-sheet.pdf`,
-  pageRanges: "3-4",
-  format: "A4",
-});
+
+for await (const path of fsPromises.glob(`${options.directory}/*.json`)) {
+  const raw = await fsPromises.readFile(path, { encoding: "utf8" });
+  const script = JSON.parse(raw);
+
+  if (!Array.isArray(script)) {
+    bar.interrupt(`${path} wasn’t a script, continuing ...`);
+    bar.tick({ script: name(script) });
+    continue;
+  }
+
+  const filename = normalize(name(script));
+  const cwd = `${rootDir}/${filename}`;
+
+  if (!fs.existsSync(cwd)) {
+    fs.mkdirSync(cwd);
+  } else {
+    bar.interrupt(
+      `${name(script)} already exists – if you want to regenerate the PDFs, delete the PDF directory`,
+    );
+    bar.tick({ script: name(script) });
+    continue;
+  }
+
+  const link = await scriptLink(script);
+  await page.goto(link, { waitUntil: "networkidle2" });
+
+  await page.pdf({
+    path: `${cwd}/${filename}-player-sheet.pdf`,
+    pageRanges: "1",
+    format: "A4",
+  });
+  await page.pdf({
+    path: `${cwd}/${filename}-meta-sheet.pdf`,
+    pageRanges: "2",
+    format: "A4",
+  });
+  await page.pdf({
+    path: `${cwd}/${filename}-night-sheet.pdf`,
+    pageRanges: "3-4",
+    format: "A4",
+  });
+  bar.tick({ script: name(script) });
+}
 
 await browser.close();
