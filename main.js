@@ -100,11 +100,14 @@ const nfiles = fs
   .readdirSync(rootDir, { withFileTypes: true })
   .filter((x) => x.name.endsWith(".json")).length;
 
-const bar = new ProgressBar(":bar :current/:total :etas (:script)", {
-  total: nfiles,
-  complete: "█",
-  incomplete: "░",
-});
+const bar = new ProgressBar(
+  "botc-pdf-gen: :bar :current/:total [≈ :etas remaining] (:script)",
+  {
+    total: nfiles,
+    complete: "█",
+    incomplete: "░",
+  },
+);
 
 for await (const path of fsPromises.glob(`${options.directory}/*.json`)) {
   const raw = await fsPromises.readFile(path, { encoding: "utf8" });
