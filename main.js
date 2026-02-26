@@ -4,8 +4,6 @@ import fsPromises from "node:fs/promises";
 import { exit } from "node:process";
 import { styleText } from "node:util";
 
-import { scriptLink } from "./script.js";
-
 import ProgressBar from "progress";
 import commandLineArgs from "command-line-args";
 import commandLineUsage from "command-line-usage";
@@ -74,6 +72,18 @@ console.log("Booting headless browser ...");
 const browser = await puppeteer.launch();
 const page = await browser.newPage();
 
+await browser.defaultBrowserContext().setPermission(
+  "*",
+  {
+    permission: { name: "clipboard-read" },
+    state: "granted",
+  },
+  {
+    permission: { name: "clipboard-write" },
+    state: "granted",
+  },
+);
+
 console.log("Loading script tool ...");
 await page.goto(scriptTool, { waitUntil: "networkidle2" });
 
@@ -92,9 +102,6 @@ if (options.compact) {
 // 3. Close settings
 await page.keyboard.down("Escape");
 
-const name = (json) => json.find((o) => o?.id === "_meta")?.name;
-const normalize = (s) => s.replace(/[^a-z0-9]/gi, "-").toLowerCase();
-
 console.log("Reading script directory ...");
 const nfiles = fs
   .readdirSync(rootDir, { withFileTypes: true })
@@ -108,6 +115,14 @@ const bar = new ProgressBar(
     incomplete: "░",
   },
 );
+
+function name(json) {
+  return json.find((o) => o?.id === "_meta")?.name;
+}
+
+function normalize(s) {
+  return s.replace(/[^a-z0-9]/gi, "-").toLowerCase();
+}
 
 for await (const path of fsPromises.glob(`${options.directory}/*.json`)) {
   const raw = await fsPromises.readFile(path, { encoding: "utf8" });
@@ -138,8 +153,14 @@ for await (const path of fsPromises.glob(`${options.directory}/*.json`)) {
     continue;
   }
 
-  const link = await scriptLink(script);
-  await page.goto(link, { waitUntil: "networkidle2" });
+  await page.evaluate((text) => {
+    navigator.clipboard.writeText(text);
+  }, JSON.stringify(script));
+
+  await page.click("button[title='Import JSON']");
+  await page.keyboard.down("Shift");
+  await page.keyboard.down("Insert");
+  await page.keyboard.up("Shift");
 
   if (!options["dry-run"]) {
     if (options.compact) {
